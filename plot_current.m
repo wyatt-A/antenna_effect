@@ -2,8 +2,7 @@
 clear; clc;
 
 %% Configuration
-Sim_Path = 'thin_wire_air';
-%Sim_Path = 'air_only';
+Sim_Path = 'wire2';
 
 % Must match the probe positions from simulation
 L = 100;

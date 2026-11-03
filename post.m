@@ -1,8 +1,6 @@
 
-clear; clc;
-
-filename = 'wire_full/E_tip_pos.h5';
-e_t = readmatrix("wire_full/et");
+filename = 'wire7/E_full.h5';
+e_t = readmatrix("wire7/et");
 
 %% Find the time-domain group
 
@@ -76,54 +74,87 @@ fprintf('Mean sampling interval: %.4f ps\n', ...
 fprintf('Sampling frequency: %.4f GHz\n', ...
     1/mean(diff(t))/1e9);
 
-%%
+%% Frequency Sweep to determine resonance
 
-%sweep = linspace(0.1e9,5e9,100);
-sweep = 3.7e9;
-e_total = [];
-for f = sweep
+f = linspace(0.1e9,2.5e9,100);
 
-    % Fourier weights
-    w = exp(-1i*2*pi*f*t);
+field_total = zeros(1,numel(f));
+for i = 1:numel(f)
+fprintf("%i\n",i);
+% Fourier weights
+w = exp(-1i*2*pi*f(i)*t);
 
-    % Fourier transform along time dimension
-    E_mat = reshape(E_td, [], numel(t));
+% Fourier transform along time dimension
+E_mat = reshape(E_td, [], numel(t));
 
-    dt = mean(diff(t));
+dt = mean(diff(t));
 
-    E_fd = reshape( ...
-        dt * (double(E_mat) * w), ...
-        size(E_td,1), ...
-        size(E_td,2), ...
-        size(E_td,3), ...
-        3);
+E_fd = reshape( ...
+    dt * (double(E_mat) * w), ...
+    size(E_td,1), ...
+    size(E_td,2), ...
+    size(E_td,3), ...
+    3);
 
-    t_exc = e_t(:,1);
-    et = e_t(:,2);
+t_exc = e_t(:,1);
+et = e_t(:,2);
 
-    dt = mean(diff(t_exc));
+dt = mean(diff(t_exc));
 
-    Et_fd = dt * sum( ...
-        et .* exp(-1i*2*pi*f*t_exc));
+Et_fd = dt * sum( ...
+    et .* exp(-1i*2*pi*f(i)*t_exc));
 
-    % E_fd contains complex field components
-    E_CW = E_fd / Et_fd;
+% E_fd contains complex field components
+E_CW = E_fd / Et_fd;
 
-    % Magnitude of vector field
-    Emag_CW = sqrt(sum(abs(E_CW).^2, 4));
+% Magnitude of vector field
+Emag_CW = sqrt(sum(abs(E_CW).^2, 4));
 
-    e_total(end+1) = sum(Emag_CW,"all");
-
-    niftiwrite(Emag_CW,"ECW");
-    
-    
-    niftiwrite(abs(E_CW(:,:,:,1)),"ECW_x");
-    niftiwrite(abs(E_CW(:,:,:,2)),"ECW_y");
-    niftiwrite(abs(E_CW(:,:,:,3)),"ECW_z");
+field_total(i) = sum(Emag_CW,"all");
 
 end
 
-hold on
-plot(sweep,e_total)
+%figure
+plot(f,field_total);
+
+%%
+
+f = 1.13e9;
+
+% Fourier weights
+w = exp(-1i*2*pi*f*t);
+
+% Fourier transform along time dimension
+E_mat = reshape(E_td, [], numel(t));
+
+dt = mean(diff(t));
+
+E_fd = reshape( ...
+    dt * (double(E_mat) * w), ...
+    size(E_td,1), ...
+    size(E_td,2), ...
+    size(E_td,3), ...
+    3);
+
+t_exc = e_t(:,1);
+et = e_t(:,2);
+
+dt = mean(diff(t_exc));
+
+Et_fd = dt * sum( ...
+    et .* exp(-1i*2*pi*f*t_exc));
+
+% E_fd contains complex field components
+E_CW = E_fd / Et_fd;
+
+% Magnitude of vector field
+Emag_CW = sqrt(sum(abs(E_CW).^2, 4));
+
+niftiwrite(Emag_CW,"ECW");
+    
+    
+
+
+
 
 

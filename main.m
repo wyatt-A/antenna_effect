@@ -1,15 +1,18 @@
 
-clear; clc;
-physical_constants;
+Sim_Path = 'tissue_only';
+Sim_CSX = 'tissue_only.xml';
 
 %% User parameters
+physical_constants;
 unit = 1e-3;              % mm
 L = 100;                  % wire length, mm
+%L = 80;                  % wire length, mm
+%wire_radius = 0.50;       % wire radius, mm
 wire_radius = 0.25;       % wire radius, mm
 
 f0 = 1.5e9;
 fc = 1.0e9;
-f_eval = linspace(0.5e9, 2.5e9, 401);
+%f_eval = linspace(0.5e9, 2.5e9, 401);
 
 % Mesh parameters (mm)
 dx_center = 2.0;
@@ -22,14 +25,12 @@ dx_outer = 4.0;
 probe_spacing = 5.0;
 probe_halfwidth = 2.0;
 
-c0=3e8;
 % Simulation geometry
 lambda_min = c0/(f0+fc)/unit;
 domain_half = max(L/2 + 70, lambda_min);
 tfsf_half = domain_half - 30;
 
-Sim_Path = 'air';
-Sim_CSX = 'air.xml';
+
 % Sim_Path = 'wire_full';
 % Sim_CSX = 'wire_full.xml';
 
@@ -39,7 +40,7 @@ end
 
 %% Initialize FDTD
 FDTD = InitFDTD( ...
-    'NrTS', 10000, ...
+    'NrTS', 30000, ...
     'EndCriteria', 1e-6);
 
 FDTD = SetGaussExcite(FDTD, f0, fc);
@@ -113,14 +114,29 @@ fprintf('Mesh: %d x %d x %d cells\n', ...
 
 %% Thin-wire conductor
 % CSX = AddMetal(CSX, 'wire');
-% 
-% points = [
-%     -L/2, L/2;
-%      0,   0;
-%      0,   0
-% ];
-% 
-% CSX = AddWire(CSX,'wire',10,points,wire_radius);
+% CSX = AddCylinder(CSX,'wire',10,[-L/2,0,0],[L/2,0,0],wire_radius);
+
+%% Optional tissue surrounding wire
+eps_r = 60;       % Relative permittivity
+sigma = 0.7;      % Electrical conductivity (S/m)
+rho   = 1000;     % Mass density (kg/m^3)
+
+tissue_size = [10 8 8];
+
+% Define tissue material
+CSX = AddMaterial(CSX, 'tissue');
+
+CSX = SetMaterialProperty(CSX, 'tissue', ...
+    'Epsilon', eps_r, ...
+    'Kappa', sigma);
+
+CSX = AddBox(CSX, 'tissue', 0, ...
+    -tfsf_half*[1 1 1], ...
+     tfsf_half*[1 1 1]);
+
+% CSX = AddBox(CSX, 'tissue', 0, ...
+%     [-L/2, 0, 0] - tissue_size, ...
+%     [L/2, 0, 0] + tissue_size);
 
 %% Plane-wave excitation
 % Propagation along z, E parallel to wire
@@ -150,12 +166,6 @@ end
 %% Frequency-domain E-field dumps near tips
 tip_dump_size = [8 6 6];
 
-% CSX = AddDump(CSX, 'E_tip_pos', ...
-%     'DumpType', 10, ...
-%     'FileType', 1, ...
-%     'DumpMode', 2, ...
-%     'Frequency', f0);
-
 CSX = AddDump(CSX, 'E_tip_pos', ...
     'DumpType', 0, ...
     'FileType', 1, ...
@@ -164,12 +174,6 @@ CSX = AddDump(CSX, 'E_tip_pos', ...
 CSX = AddBox(CSX, 'E_tip_pos', 0, ...
     [ L/2, 0, 0] - tip_dump_size, ...
     [ L/2, 0, 0] + tip_dump_size);
-
-% CSX = AddDump(CSX, 'E_tip_neg', ...
-%     'DumpType', 10, ...
-%     'FileType', 1, ...
-%     'DumpMode', 2, ...
-%     'Frequency', f0);
 
 CSX = AddDump(CSX, 'E_tip_neg', ...
     'DumpType', 0, ...
@@ -180,6 +184,15 @@ CSX = AddBox(CSX, 'E_tip_neg', 0, ...
     [-L/2, 0, 0] - tip_dump_size, ...
     [-L/2, 0, 0] + tip_dump_size);
 
+CSX = AddDump(CSX, 'E_full', ...
+    'DumpType', 0, ...
+    'FileType', 1, ...
+    'DumpMode', 2);
+
+CSX = AddBox(CSX, 'E_full', 0, ...
+    [-L/2, 0, 0] - tip_dump_size, ...
+    [L/2, 0, 0] + tip_dump_size);
+
 %% Write and run
 xml_file = fullfile(Sim_Path, Sim_CSX);
 
@@ -187,42 +200,3 @@ WriteOpenEMS(xml_file, FDTD, CSX);
 CSXGeomPlot(xml_file);
 
 RunOpenEMS(Sim_Path, Sim_CSX);
-
-% %% Read current spectra
-% I_fd = complex(zeros(numel(x_probe), ...
-%                      numel(f_eval)));
-% 
-% for n = 1:numel(x_probe)
-%     name = sprintf('I_%03d', n);
-% 
-%     p = ReadUI(name, Sim_Path, f_eval);
-% 
-%     I_fd(n,:) = reshape(p.FD{1}.val, 1, []);
-% end
-% 
-% %% Current spectrum at wire center
-% [~, center_idx] = min(abs(x_probe));
-% 
-% figure;
-% plot(f_eval/1e9, ...
-%      abs(I_fd(center_idx,:)), ...
-%      'LineWidth', 2);
-% xlabel('Frequency (GHz)');
-% ylabel('Raw spectral current');
-% title('Center current spectrum');
-% grid on;
-% 
-% %% Spatial current distribution
-% [~, f_idx] = min(abs(f_eval - 1.35e9));
-% 
-% I_spatial = abs(I_fd(:,f_idx));
-% 
-% figure;
-% plot(x_probe, I_spatial, 'o-', ...
-%     'LineWidth', 1.5);
-% 
-% xlabel('Position along wire (mm)');
-% ylabel('Raw spectral current');
-% title(sprintf('Current distribution at %.3f GHz', ...
-%     f_eval(f_idx)/1e9));
-% grid on;
